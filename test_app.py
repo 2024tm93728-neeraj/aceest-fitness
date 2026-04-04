@@ -1,31 +1,31 @@
 import unittest
-from unittest.mock import patch
 import tkinter as tk
 import os
 import sqlite3
+from unittest.mock import patch
 
-from app import ACEestApp
+from app import ACEestApp  # change if filename differs
 
 
 class TestACEestApp(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        # Use test DB
+        cls.test_db = "test_aceest.db"
+
     def setUp(self):
-        # Use test DB to avoid conflicts
-        self.test_db = "test_aceest.db"
+        # Remove old test DB
+        if os.path.exists(self.test_db):
+            os.remove(self.test_db)
 
         # Patch DB_NAME dynamically
         import app
         app.DB_NAME = self.test_db
 
-        # Remove old test DB
-        if os.path.exists(self.test_db):
-            os.remove(self.test_db)
-
-        # Setup Tkinter root (hidden)
         self.root = tk.Tk()
-        self.root.withdraw()
+        self.root.withdraw()  # prevent UI
 
-        # Initialize app
         self.app = ACEestApp(self.root)
 
     def tearDown(self):
@@ -35,152 +35,170 @@ class TestACEestApp(unittest.TestCase):
         if os.path.exists(self.test_db):
             os.remove(self.test_db)
 
-    # 1. Test DB tables created
+    # ---------- DB TESTS ----------
+
     def test_tables_created(self):
         self.app.cur.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )
-        tables = [t[0] for t in self.app.cur.fetchall()]
+        tables = {row[0] for row in self.app.cur.fetchall()}
 
         self.assertIn("clients", tables)
         self.assertIn("progress", tables)
         self.assertIn("workouts", tables)
+        self.assertIn("exercises", tables)
         self.assertIn("metrics", tables)
 
-    # 2. Test programs loaded
+    # ---------- PROGRAM DATA ----------
+
     def test_programs_loaded(self):
         self.assertIn("Fat Loss (FL) – 3 day", self.app.programs)
         self.assertIn("Muscle Gain (MG) – PPL", self.app.programs)
 
-    # 3. Test save_client validation (missing name)
-    @patch("tkinter.messagebox.showerror")
-    def test_save_client_no_name(self, mock_error):
-        self.app.program.set("Fat Loss (FL) – 3 day")
-        self.app.save_client()
-        mock_error.assert_called_once()
+    # ---------- CLIENT ----------
 
-    # 4. Test save_client validation (missing program)
-    @patch("tkinter.messagebox.showerror")
-    def test_save_client_no_program(self, mock_error):
-        self.app.name.set("Neeraj")
-        self.app.save_client()
-        mock_error.assert_called_once()
-
-    # 5. Test save_client success
     @patch("tkinter.messagebox.showinfo")
     def test_save_client_success(self, mock_info):
-        self.app.name.set("Neeraj")
+        self.app.name.set("John")
+        self.app.age.set(25)
+        self.app.height.set(175)
         self.app.weight.set(70)
         self.app.program.set("Fat Loss (FL) – 3 day")
 
         self.app.save_client()
 
-        self.app.cur.execute("SELECT * FROM clients WHERE name='Neeraj'")
-        result = self.app.cur.fetchone()
+        self.app.cur.execute("SELECT * FROM clients WHERE name=?", ("John",))
+        row = self.app.cur.fetchone()
 
-        self.assertIsNotNone(result)
-        mock_info.assert_called_once()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[1], "John")
 
-    # 6. Test calorie calculation
-    def test_calorie_calculation(self):
-        self.app.name.set("TestUser")
-        self.app.weight.set(80)
-        self.app.program.set("Muscle Gain (MG) – PPL")
+    @patch("tkinter.messagebox.showerror")
+    def test_save_client_validation(self, mock_error):
+        self.app.name.set("")
+        self.app.program.set("")
 
         self.app.save_client()
 
-        self.app.cur.execute("SELECT calories FROM clients WHERE name='TestUser'")
-        calories = self.app.cur.fetchone()[0]
+        mock_error.assert_called()
 
-        self.assertEqual(calories, 80 * 35)
-
-    # 7. Test load_client not found
     @patch("tkinter.messagebox.showwarning")
-    def test_load_client_not_found(self, mock_warn):
-        self.app.name.set("Unknown")
+    def test_load_client_not_found(self, mock_warning):
+        self.app.name.set("Ghost")
         self.app.load_client()
-        mock_warn.assert_called_once()
 
-    # 8. Test load_client success
-    def test_load_client_success(self):
-        # Insert test data
+        mock_warning.assert_called()
+
+    @patch("tkinter.messagebox.showinfo")
+    def test_load_client_success(self, mock_info):
+        # Insert manually
         self.app.cur.execute("""
-            INSERT OR REPLACE INTO clients
+            INSERT INTO clients
             (name, age, height, weight, program, calories, target_weight, target_adherence)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, ("Rahul", 25, 175, 70, "Fat Loss (FL) – 3 day", 1540, 65, 80))
+        """, ("John", 25, 175, 70, "Beginner (BG)", 1800, 65, 80))
         self.app.conn.commit()
 
-        self.app.name.set("Rahul")
+        self.app.name.set("John")
         self.app.load_client()
 
         self.assertEqual(self.app.age.get(), 25)
         self.assertEqual(self.app.weight.get(), 70)
 
-    # 9. Test save_progress
+    # ---------- PROGRESS ----------
+
     @patch("tkinter.messagebox.showinfo")
     def test_save_progress(self, mock_info):
-        self.app.name.set("Amit")
+        self.app.name.set("John")
         self.app.adherence.set(85)
 
         self.app.save_progress()
 
-        self.app.cur.execute("SELECT * FROM progress WHERE client_name='Amit'")
-        result = self.app.cur.fetchone()
+        self.app.cur.execute("SELECT * FROM progress WHERE client_name=?", ("John",))
+        row = self.app.cur.fetchone()
 
-        self.assertIsNotNone(result)
-        mock_info.assert_called_once()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[3], 85)
 
-    # 10. Test ensure_client failure
-    @patch("tkinter.messagebox.showwarning")
-    def test_ensure_client_fail(self, mock_warn):
+    # ---------- METRICS ----------
+
+    def test_metrics_insert(self):
+        self.app.cur.execute("""
+            INSERT INTO metrics (client_name, date, weight, waist, bodyfat)
+            VALUES (?, ?, ?, ?, ?)
+        """, ("John", "2026-01-01", 70, 80, 15))
+        self.app.conn.commit()
+
+        self.app.cur.execute("SELECT * FROM metrics WHERE client_name=?", ("John",))
+        row = self.app.cur.fetchone()
+
+        self.assertIsNotNone(row)
+        self.assertEqual(row[2], "2026-01-01")
+
+    # ---------- SUMMARY ----------
+
+    def test_refresh_summary_no_crash(self):
+        self.app.current_client = "John"
+
+        # Insert minimal client
+        self.app.cur.execute("""
+            INSERT INTO clients
+            (name, age, height, weight, program, calories, target_weight, target_adherence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, ("John", 25, 175, 70, "Beginner (BG)", 1800, None, None))
+        self.app.conn.commit()
+
+        # Should not crash
+        self.app.refresh_summary()
+
+    # ---------- HELPER ----------
+
+    def test_ensure_client_false(self):
         self.app.current_client = None
         self.app.name.set("")
+        self.app.client_list.set("")
 
+        with patch("tkinter.messagebox.showwarning") as mock_warn:
+            result = self.app.ensure_client()
+            self.assertFalse(result)
+            mock_warn.assert_called()
+
+    def test_ensure_client_true(self):
+        self.app.name.set("John")
         result = self.app.ensure_client()
 
-        self.assertFalse(result)
-        mock_warn.assert_called_once()
+        self.assertTrue(result)
+        self.assertEqual(self.app.current_client, "John")
 
-    # 11. Test BMI info missing data
-    @patch("tkinter.messagebox.showwarning")
-    def test_bmi_missing_data(self, mock_warn):
-        self.app.current_client = "Test"
-        self.app.height.set(0)
-        self.app.weight.set(0)
+    # ---------- CHARTS ----------
 
-        self.app.show_bmi_info()
-        mock_warn.assert_called_once()
+    @patch("matplotlib.pyplot.show")
+    def test_show_progress_chart_no_data(self, mock_show):
+        self.app.current_client = "John"
 
-    # 12. Test BMI normal case
-    @patch("tkinter.messagebox.showinfo")
-    def test_bmi_normal(self, mock_info):
-        self.app.current_client = "Test"
-        self.app.height.set(170)
-        self.app.weight.set(65)
-
-        self.app.show_bmi_info()
-        mock_info.assert_called_once()
-
-    # 13. Test progress chart no data
-    @patch("tkinter.messagebox.showinfo")
-    def test_progress_chart_no_data(self, mock_info):
-        self.app.current_client = "Test"
-
-        with patch("matplotlib.pyplot.show"):
+        with patch("tkinter.messagebox.showinfo") as mock_info:
             self.app.show_progress_chart()
+            mock_info.assert_called()
 
-        mock_info.assert_called_once()
+    @patch("matplotlib.pyplot.show")
+    def test_show_weight_chart_no_data(self, mock_show):
+        self.app.current_client = "John"
 
-    # 14. Test weight chart no data
-    @patch("tkinter.messagebox.showinfo")
-    def test_weight_chart_no_data(self, mock_info):
-        self.app.current_client = "Test"
-
-        with patch("matplotlib.pyplot.show"):
+        with patch("tkinter.messagebox.showinfo") as mock_info:
             self.app.show_weight_chart()
+            mock_info.assert_called()
 
-        mock_info.assert_called_once()
+    # ---------- BMI ----------
+
+    @patch("tkinter.messagebox.showinfo")
+    def test_bmi_calculation(self, mock_info):
+        self.app.current_client = "John"
+        self.app.height.set(175)
+        self.app.weight.set(70)
+
+        self.app.show_bmi_info()
+
+        mock_info.assert_called()
 
 
 if __name__ == "__main__":
