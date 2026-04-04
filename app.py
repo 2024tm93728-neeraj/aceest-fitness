@@ -161,8 +161,6 @@ Calories : {calories} kcal/day
 
 
 if __name__ == "__main__":
-    import os
-    if not os.environ.get("CI"):
-        root = tk.Tk()
-        ACEestApp(root)
-        root.mainloop()
+    root = tk.Tk()
+    ACEestApp(root)
+    root.mainloop()
