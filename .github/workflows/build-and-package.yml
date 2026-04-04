@@ -55,7 +55,7 @@ jobs:
         run: |
           coverage run -m pytest --maxfail=1 --disable-warnings -q
           coverage report -m
-          coverage report --fail-under=60
+          coverage report --fail-under=80
 
       # Build Docker image
       - name: Build Docker image
