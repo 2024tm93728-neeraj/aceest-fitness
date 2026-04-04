@@ -1,0 +1,60 @@
+name: Build Test and Package
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-test-quality-package:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Install dependencies directly (no requirements.txt)
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 mypy pytest coverage matplotlib
+
+      # Linting
+      - name: Run flake8 (Lint)
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+      # Type checking
+      - name: Run mypy (Type Check)
+        run: mypy .
+
+      # Unit tests with coverage
+      - name: Run pytest with coverage
+        run: |
+          coverage run -m pytest --maxfail=1 --disable-warnings -q
+          coverage report -m   # shows coverage summary in console
+          coverage report --fail-under=80  # fail if coverage < 80%
+
+      # Build Docker image
+      - name: Build Docker image
+        run: docker build -t aceest-app:latest .
+
+      # Save Docker image as artifact
+      - name: Export Docker image
+        run: docker save aceest-app:latest | gzip > aceest-app.tar.gz
+
+      - name: Upload Docker image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aceest-app-docker
+          path: aceest-app.tar.gz
+
