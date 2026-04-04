@@ -1,23 +1,28 @@
 import unittest
 import tkinter as tk
 from unittest.mock import patch
+import sqlite3
 from app import ACEestApp
 
 
 class TestACEestApp(unittest.TestCase):
 
     def setUp(self):
-        """Setup app with test DB"""
+        """Setup app with in-memory DB and clean tables"""
         self.root = tk.Tk()
-        self.root.withdraw()
+        self.root.withdraw()  # prevent GUI window
         self.app = ACEestApp(self.root)
 
-        # Use in-memory DB for testing (important)
+        # Switch to in-memory DB for isolation
         self.app.conn.close()
-        import sqlite3
         self.app.conn = sqlite3.connect(":memory:")
         self.app.cur = self.app.conn.cursor()
         self.app.init_db()
+
+        # Ensure tables are empty before each test
+        self.app.cur.execute("DELETE FROM clients")
+        self.app.cur.execute("DELETE FROM progress")
+        self.app.conn.commit()
 
     def tearDown(self):
         """Cleanup"""

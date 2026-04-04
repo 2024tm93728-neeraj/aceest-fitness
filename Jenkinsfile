@@ -19,6 +19,7 @@ pipeline {
         stage('Run Unit Tests') {
             steps {
                 sh '''
+		export DISPLAY=:0
                 python3 -m unittest discover -s . -p "test_*.py" -v
                 '''
             }
@@ -36,7 +37,7 @@ pipeline {
 
     post {
         always {
-            // Archive the HTML coverage report
+            // Archive the HTML coverage
             archiveArtifacts artifacts: 'htmlcov/**', fingerprint: true
         }
     }
