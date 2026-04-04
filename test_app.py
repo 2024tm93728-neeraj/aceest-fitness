@@ -1,175 +1,197 @@
 import unittest
 from unittest.mock import patch, MagicMock
-import tkinter as tk
 import os
+import sqlite3
 
-# Import your app
-import app as app_module
+import app  # your main file
 
 
 class TestACEestApp(unittest.TestCase):
 
     def setUp(self):
-        # Create Tk root safely
-        self.root = tk.Tk()
-        self.root.withdraw()
+        # Use separate test DB
+        app.DB_NAME = "test_aceest.db"
+        app.init_db()
 
-        # Patch login window to avoid UI blocking
-        with patch.object(app_module.ACEestApp, "show_login_window"):
-            self.app = app_module.ACEestApp(self.root)
+        # Mock root
+        self.root = MagicMock()
 
-        # Use in-memory DB for testing
-        self.app.conn = app_module.sqlite3.connect(":memory:")
-        self.app.cur = self.app.conn.cursor()
-        self.app.init_db()
-        self.app.setup_data()
+        # Prevent UI from loading
+        with patch.object(app.ACEestApp, "login_screen"):
+            self.app = app.ACEestApp(self.root)
 
-        # Mock UI-dependent methods
-        self.app.set_status = MagicMock()
-
-        # Create required UI variables manually
-        self.app.name = tk.StringVar()
-        self.app.age = tk.IntVar()
-        self.app.height = tk.DoubleVar()
-        self.app.weight = tk.DoubleVar()
-        self.app.program = tk.StringVar()
-        self.app.membership_var = tk.StringVar()
-        self.app.summary = MagicMock()
-        self.app.program_tree = MagicMock()
+        # ✅ Mock UI components globally (IMPORTANT FIX)
+        self.app.summary_text = MagicMock()
+        self.app.tree_workouts = MagicMock()
+        self.app.chart_frame = MagicMock()
+        self.app.client_list = MagicMock()
 
     def tearDown(self):
         self.app.conn.close()
-        self.root.destroy()
-        # Cleanup PDF if created
-        if os.path.exists("TestUser_report.pdf"):
-            os.remove("TestUser_report.pdf")
+        if os.path.exists("test_aceest.db"):
+            os.remove("test_aceest.db")
 
-    # ---------- DATABASE TEST ----------
+    # ---------- DATABASE TESTS ----------
 
-    def test_db_tables_created(self):
-        self.app.cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
-        tables = [t[0] for t in self.app.cur.fetchall()]
+    def test_init_db_creates_tables(self):
+        conn = sqlite3.connect(app.DB_NAME)
+        cur = conn.cursor()
+
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [t[0] for t in cur.fetchall()]
+
         self.assertIn("clients", tables)
         self.assertIn("users", tables)
+        conn.close()
 
-    # ---------- SAVE CLIENT ----------
+    def test_default_admin_exists(self):
+        self.app.cur.execute("SELECT * FROM users WHERE username='admin'")
+        user = self.app.cur.fetchone()
+        self.assertIsNotNone(user)
 
-    @patch("app.messagebox.showinfo")
-    def test_save_client(self, mock_msg):
-        self.app.name.set("TestUser")
-        self.app.age.set(25)
-        self.app.height.set(175)
-        self.app.weight.set(70)
-        self.app.program.set("Beginner (BG)")
-        self.app.membership_var.set("2026-12-31")
+    # ---------- LOGIN TESTS ----------
 
-        self.app.save_client()
-
-        self.app.cur.execute(
-            "SELECT * FROM clients WHERE name=?", ("TestUser",)
-        )
-        row = self.app.cur.fetchone()
-
-        self.assertIsNotNone(row)
-        self.assertEqual(row[1], "TestUser")
-
-    # ---------- LOAD CLIENT ----------
-
-    def test_load_client(self):
-        # Insert test data
-        self.app.cur.execute(
-            "INSERT INTO clients (name, age, height, weight, program) VALUES (?,?,?,?,?)",
-            ("TestUser", 25, 175, 70, "Beginner (BG)"),
-        )
-        self.app.conn.commit()
-
-        self.app.current_client = "TestUser"
-        self.app.load_client()
-
-        self.assertEqual(self.app.name.get(), "TestUser")
-
-    # ---------- LOGIN SUCCESS ----------
-
-    @patch("app.messagebox.showerror")
-    def test_login_success(self, mock_error):
-        # Insert test user
-        self.app.cur.execute(
-            "INSERT INTO users (username, password, role) VALUES (?,?,?)",
-            ("test", "123", "Admin"),
-        )
-        self.app.conn.commit()
-
-        self.app.username_var = tk.StringVar(value="test")
-        self.app.password_var = tk.StringVar(value="123")
-        self.app.login_win = MagicMock()
-        self.app.root.deiconify = MagicMock()
-        self.app.setup_ui = MagicMock()
-
-        self.app.login_user()
-
-        self.assertEqual(self.app.current_user, "test")
-        self.assertEqual(self.app.user_role, "Admin")
-
-    # ---------- LOGIN FAILURE ----------
-
-    @patch("app.messagebox.showerror")
+    @patch("tkinter.messagebox.showerror")
     def test_login_failure(self, mock_error):
-        self.app.username_var = tk.StringVar(value="wrong")
-        self.app.password_var = tk.StringVar(value="wrong")
+        self.app.username_var = MagicMock()
+        self.app.password_var = MagicMock()
 
-        self.app.login_user()
+        self.app.username_var.get.return_value = "wrong"
+        self.app.password_var.get.return_value = "wrong"
 
-        mock_error.assert_called_once()
-
-    # ---------- AI PROGRAM GENERATION ----------
-
-    @patch("app.simpledialog.askstring", return_value="beginner")
-    @patch("app.messagebox.showinfo")
-    def test_generate_ai_program(self, mock_msg, mock_input):
-        # Insert client
-        self.app.cur.execute(
-            "INSERT INTO clients (name, program) VALUES (?,?)",
-            ("TestUser", "Fat Loss (FL) – 3 day"),
-        )
-        self.app.conn.commit()
-
-        self.app.current_client = "TestUser"
-
-        self.app.program_tree.get_children.return_value = []
-        self.app.program_tree.insert = MagicMock()
-
-        self.app.generate_ai_program()
-
-        self.assertTrue(self.app.program_tree.insert.called)
-
-    # ---------- INVALID AI INPUT ----------
-
-    @patch("app.simpledialog.askstring", return_value="invalid")
-    @patch("app.messagebox.showerror")
-    def test_generate_ai_invalid_input(self, mock_error, mock_input):
-        self.app.current_client = "TestUser"
-        self.app.generate_ai_program()
+        self.app.login()
 
         mock_error.assert_called_once()
 
-    # ---------- PDF EXPORT ----------
+    def test_login_success(self):
+        self.app.username_var = MagicMock()
+        self.app.password_var = MagicMock()
 
-    @patch("app.messagebox.showinfo")
-    def test_export_pdf(self, mock_msg):
-        # Insert client
+        self.app.username_var.get.return_value = "admin"
+        self.app.password_var.get.return_value = "admin"
+
+        with patch.object(self.app, "dashboard") as mock_dashboard:
+            self.app.login()
+            mock_dashboard.assert_called_once()
+
+    # ---------- CLIENT TESTS ----------
+
+    @patch("tkinter.simpledialog.askstring", return_value="John")
+    @patch("tkinter.messagebox.showinfo")
+    def test_add_save_client(self, mock_info, mock_input):
+        self.app.add_save_client()
+
+        self.app.cur.execute("SELECT * FROM clients WHERE name='John'")
+        client = self.app.cur.fetchone()
+
+        self.assertIsNotNone(client)
+        mock_info.assert_called_once()
+
+    def test_refresh_client_list(self):
         self.app.cur.execute(
-            "INSERT INTO clients (name, age, height, weight, program, membership_expiry) VALUES (?,?,?,?,?,?)",
-            ("TestUser", 25, 175, 70, "Beginner", "2026-12-31"),
+            "INSERT INTO clients (name, membership_status) VALUES (?, ?)",
+            ("Alice", "Active")
         )
         self.app.conn.commit()
 
-        self.app.current_client = "TestUser"
+        self.app.refresh_client_list()
 
-        self.app.export_pdf_report()
+        self.app.client_list.__setitem__.assert_called()
 
-        self.assertTrue(os.path.exists("TestUser_report.pdf"))
+    # ---------- PROGRAM GENERATION ----------
+
+    @patch("tkinter.messagebox.showinfo")
+    def test_generate_program(self, mock_info):
+        self.app.cur.execute(
+            "INSERT INTO clients (name, membership_status) VALUES (?, ?)",
+            ("Bob", "Active")
+        )
+        self.app.conn.commit()
+
+        self.app.current_client = "Bob"
+
+        self.app.generate_program()
+
+        self.app.cur.execute("SELECT program FROM clients WHERE name='Bob'")
+        program = self.app.cur.fetchone()[0]
+
+        self.assertIsNotNone(program)
+        mock_info.assert_called_once()
+
+    @patch("tkinter.messagebox.showwarning")
+    def test_generate_program_no_client(self, mock_warn):
+        self.app.current_client = None
+        self.app.generate_program()
+        mock_warn.assert_called_once()
+
+    # ---------- PDF GENERATION ----------
+
+    @patch("app.FPDF")
+    @patch("tkinter.messagebox.showinfo")
+    def test_generate_pdf(self, mock_info, mock_pdf):
+        self.app.cur.execute(
+            "INSERT INTO clients (name, membership_status) VALUES (?, ?)",
+            ("TestPDF", "Active")
+        )
+        self.app.conn.commit()
+
+        self.app.current_client = "TestPDF"
+
+        pdf_instance = MagicMock()
+        mock_pdf.return_value = pdf_instance
+
+        self.app.generate_pdf()
+
+        pdf_instance.add_page.assert_called()
+        pdf_instance.output.assert_called()
+        mock_info.assert_called_once()
+
+    # ---------- MEMBERSHIP ----------
+
+    @patch("tkinter.messagebox.showinfo")
+    def test_check_membership(self, mock_info):
+        self.app.cur.execute(
+            "INSERT INTO clients (name, membership_status) VALUES (?, ?)",
+            ("Sam", "Active")
+        )
+        self.app.conn.commit()
+
+        self.app.current_client = "Sam"
+
+        self.app.check_membership()
+
+        mock_info.assert_called_once()
+
+    # ---------- SUMMARY ----------
+
+    def test_refresh_summary(self):
+        self.app.cur.execute(
+            "INSERT INTO clients (name, membership_status) VALUES (?, ?)",
+            ("Mike", "Active")
+        )
+        self.app.conn.commit()
+
+        self.app.current_client = "Mike"
+
+        self.app.refresh_summary()
+
+        self.app.summary_text.insert.assert_called()
+
+    # ---------- WORKOUT ----------
+
+    def test_refresh_workouts_no_client(self):
+        self.app.current_client = None
+        self.app.refresh_workouts()  # should not crash
+
+    # ---------- UTILITY ----------
+
+    def test_clear_root(self):
+        mock_widget = MagicMock()
+        self.root.winfo_children.return_value = [mock_widget]
+
+        self.app.clear_root()
+
+        mock_widget.destroy.assert_called_once()
 
 
 if __name__ == "__main__":
