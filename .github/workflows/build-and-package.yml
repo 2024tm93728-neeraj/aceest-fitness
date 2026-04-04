@@ -2,9 +2,9 @@ name: Build Test and Package
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build-test-quality-package:
@@ -27,6 +27,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install flake8 mypy pytest coverage matplotlib
 
+      # Install Xvfb for virtual display
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      # Start virtual display
+      - name: Start X virtual framebuffer
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
       # Linting
       - name: Run flake8 (Lint)
         run: |
@@ -37,12 +49,12 @@ jobs:
       - name: Run mypy (Type Check)
         run: mypy .
 
-      # Unit tests with coverage
+      # Unit tests with coverage (now using virtual display)
       - name: Run pytest with coverage
         run: |
           coverage run -m pytest --maxfail=1 --disable-warnings -q
-          coverage report -m   # shows coverage summary in console
-          coverage report --fail-under=80  # fail if coverage < 80%
+          coverage report -m
+          coverage report --fail-under=80
 
       # Build Docker image
       - name: Build Docker image
@@ -57,4 +69,3 @@ jobs:
         with:
           name: aceest-app-docker
           path: aceest-app.tar.gz
-
