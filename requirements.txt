@@ -1,0 +1,16 @@
+# Core dependencies
+Flask
+matplotlib
+fpdf2
+
+# Type stubs (for static type checking)
+types-fpdf2
+
+# Linting and type checking
+flake8
+mypy
+
+# Testing
+test
+pytest
+coverage
