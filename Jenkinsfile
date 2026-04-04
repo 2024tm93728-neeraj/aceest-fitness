@@ -19,7 +19,7 @@ pipeline {
         stage('Run Unit Tests') {
             steps {
                 sh '''
-		export DISPLAY=:0
+		export CI=true
                 python3 -m unittest discover -s . -p "test_*.py" -v
                 '''
             }
@@ -28,6 +28,7 @@ pipeline {
         stage('Coverage Report') {
             steps {
                 sh '''
+		export CI=true
                 coverage run -m unittest discover -s . -p "test_*.py"
                 coverage html
                 '''
