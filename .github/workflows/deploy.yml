@@ -1,10 +1,11 @@
 name: Deploy to EKS
+
 on:
   workflow_dispatch:
-on:
-  push:
-    tags:
-      - "v*"
+    inputs:
+      tag:
+        description: "Docker image tag (e.g. v3.2.5)"
+        required: true
 
 jobs:
   deploy:
@@ -25,11 +26,11 @@ jobs:
         uses: azure/setup-kubectl@v3
 
       - name: Setup kubeconfig
-        run: |
-          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
-          export KUBECONFIG=$PWD/kubeconfig
+        run: echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
 
       - name: Deploy to EKS
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
         run: |
           kubectl set image deployment/devops-app \
-          devops-app=2024tm93728/aceest-app:v3.2.4
+          devops-app=2024tm93728/aceest-app:${{ github.event.inputs.tag }}
