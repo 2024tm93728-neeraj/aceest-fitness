@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-app
+  template:
+    metadata:
+      labels:
+        app: aceest-app
+    spec:
+      containers:
+        - name: aceest-app
+          image: aceest-app:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5000
