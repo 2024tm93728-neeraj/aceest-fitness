@@ -4,7 +4,6 @@ FROM python:3.11-slim
 # Install system dependencies required for Tkinter and Matplotlib
 RUN apt-get update && apt-get install -y \
     python3-tk \
-    libsqlite3-dev \
     libfreetype6-dev \
     libpng-dev \
     libx11-6 \
@@ -16,11 +15,11 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY . /app
-
-# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir matplotlib
+
+COPY . .
 
 # Default command to run the Tkinter app
 CMD ["python", "app.py"]
