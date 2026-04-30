@@ -1,5 +1,6 @@
 name: Deploy to EKS
-
+on:
+  workflow_dispatch:
 on:
   push:
     tags:
