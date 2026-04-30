@@ -11,6 +11,5 @@ flake8
 mypy
 
 # Testing
-test
 pytest
 coverage
