@@ -23,5 +23,5 @@ COPY . /app
 RUN pip install --no-cache-dir matplotlib
 
 # Default command to run the Tkinter app
-CMD ["python", "main.py"]
+CMD ["python", "app.py"]
 
